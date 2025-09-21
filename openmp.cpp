@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <omp.h>
 #include <bits/stdc++.h>
+#include <cfloat>
+#include <cstring>
 #include "libarff/arff_parser.h"
 #include "libarff/arff_data.h"
 
@@ -25,7 +27,57 @@ int* KNN(ArffData* train, ArffData* test, int k) {
     /*************************************************************
     *** Complete this code and return the array of predictions ***
     **************************************************************/
+ int num_classes = train->num_classes();
+    int num_attributes = train->num_attributes();
+    int train_num_instances = train->num_instances();
+    int test_num_instances = test->num_instances();
+    
+    float* train_matrix = train->get_dataset_matrix();
+    float* test_matrix = test->get_dataset_matrix();
 
+    #pragma omp parallel for
+    for(int queryIndex = 0; queryIndex < test_num_instances; queryIndex++) {
+        // These variables are now private to each thread's loop iteration
+        float* candidates = (float*) calloc(k*2, sizeof(float));
+        for(int i = 0; i < 2*k; i++){ candidates[i] = FLT_MAX; }
+
+        int* classCounts = (int*)calloc(num_classes, sizeof(int));
+        
+        for(int keyIndex = 0; keyIndex < train_num_instances; keyIndex++) {
+            float dist = distance(&test_matrix[queryIndex*num_attributes], &train_matrix[keyIndex*num_attributes], num_attributes);
+
+            for(int c = 0; c < k; c++){
+                if(dist < candidates[2*c]) {
+                    for(int x = k-2; x >= c; x--) {
+                        candidates[2*x+2] = candidates[2*x];
+                        candidates[2*x+3] = candidates[2*x+1];
+                    }
+                    candidates[2*c] = dist;
+                    candidates[2*c+1] = train_matrix[keyIndex*num_attributes + num_attributes - 1];
+                    break;
+                }
+            }
+        }
+
+        for(int i = 0; i < k; i++) {
+            classCounts[(int)candidates[2*i+1]] += 1;
+        }
+        
+        int max_value = -1;
+        int max_class = 0;
+        for(int i = 0; i < num_classes; i++) {
+            if(classCounts[i] > max_value) {
+                max_value = classCounts[i];
+                max_class = i;
+            }
+        }
+        
+        predictions[queryIndex] = max_class;
+
+        free(candidates);
+        free(classCounts);
+    }
+    
     return predictions;
 }
 
